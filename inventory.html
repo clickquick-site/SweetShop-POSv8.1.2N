@@ -294,15 +294,34 @@
       color: var(--success);
     }
 
-    .stock-medium {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--warning);
+    /* 🟡 تنبيه مبكر */
+    .stock-watch {
+      background: rgba(245, 158, 11, 0.12);
+      color: #f59e0b;
     }
 
-    .stock-low {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--danger);
+    /* ⚠️ تحذير */
+    .stock-warning {
+      background: rgba(234, 88, 12, 0.15);
+      color: #ea580c;
     }
+
+    /* 🚨 حرج */
+    .stock-critical {
+      background: rgba(239, 68, 68, 0.18);
+      color: var(--danger);
+      font-weight: 900;
+    }
+
+    /* ⛔ نافد */
+    .stock-low {
+      background: rgba(107, 114, 128, 0.2);
+      color: #9ca3af;
+      text-decoration: line-through;
+    }
+
+    /* للتوافق مع الكود القديم */
+    .stock-medium { background: rgba(245,158,11,0.12); color: #f59e0b; }
 
     .expiry-badge {
       display: inline-block;
@@ -1452,7 +1471,13 @@
 let allProducts = [];
 let allFamilies = [];
 let allBatches  = [];          // دفعات المنتجات (productBatches)
-let expiryAlertDays = 30;      // النافذة الزمنية للتنبيه (من الإعدادات)
+let expiryAlertDays   = 30;    // للتوافق (يُستبدل بالمتغيرات التفصيلية)
+let expiryWatchDays   = 45;    // 🟡 تنبيه مبكر
+let expiryWarningDays = 30;    // ⚠️ تحذير
+let expiryCriticalDays= 15;    // 🚨 حرج
+let stockWatchQty     = 20;    // 🟡 تنبيه مبكر مخزون
+let stockWarningQty   = 15;    // ⚠️ تحذير مخزون
+let stockCriticalQty  = 10;    // 🚨 حرج مخزون
 let currentPage = 1;
 const pageSize = 20;
 let totalProducts = 0;
@@ -1503,7 +1528,14 @@ async function loadData() {
 
   // تحميل الدفعات والإعدادات
   allBatches = await window.dbManager.getAll('productBatches');
-  expiryAlertDays = parseInt(await window.getSetting('expiryAlertDays')) || 30;
+  // قراءة كل الحدود من الإعدادات (Single Source of Truth)
+  expiryAlertDays    = parseInt(await window.getSetting('expiryAlertDays'))    || 30;
+  expiryWatchDays    = parseInt(await window.getSetting('expiryWatchDays'))    || 45;
+  expiryWarningDays  = parseInt(await window.getSetting('expiryWarningDays'))  || 30;
+  expiryCriticalDays = parseInt(await window.getSetting('expiryCriticalDays')) || 15;
+  stockWatchQty      = parseInt(await window.getSetting('stockWatchQty'))      || 20;
+  stockWarningQty    = parseInt(await window.getSetting('stockWarningQty'))    || 15;
+  stockCriticalQty   = parseInt(await window.getSetting('stockCriticalQty'))   || 10;
 
   // ترتيب المنتجات
   allProducts.sort((a, b) => a.name.localeCompare(b.name));
@@ -1515,8 +1547,12 @@ async function loadData() {
 async function updateAlerts() {
   const lowStockThreshold = parseInt(await window.getSetting('lowStockAlert')) || 5;
 
-  const lowStock = allProducts.filter(p => p.quantity > 0 && p.quantity <= lowStockThreshold).length;
-  const outStock = allProducts.filter(p => p.quantity === 0).length;
+  // 4 مستويات المخزون
+  const outStock      = allProducts.filter(p => p.quantity === 0).length;
+  const criticalStock = allProducts.filter(p => p.quantity > 0 && p.quantity <= stockCriticalQty).length;
+  const warningStock  = allProducts.filter(p => p.quantity > stockCriticalQty && p.quantity <= stockWarningQty).length;
+  const watchStock    = allProducts.filter(p => p.quantity > stockWarningQty  && p.quantity <= stockWatchQty).length;
+  const lowStock      = criticalStock; // للتوافق
 
   // حساب الدفعات من productBatches (مع fallback للمنتجات القديمة)
   const activeBatches = allBatches.filter(b => (b.quantity || 0) > 0 && b.expiryDate);
@@ -1531,51 +1567,55 @@ async function updateAlerts() {
     ...oldStyleProducts.map(p => ({ expiryDate: p.expiryDate }))
   ];
 
+  // 4 مستويات الصلاحية مربوطة بالإعدادات
   const expired  = allExpiryItems.filter(x => window.dateUtils.daysBetween(x.expiryDate) >= 0).length;
-  const critical = allExpiryItems.filter(x => {
+  const expCrit  = allExpiryItems.filter(x => {
     const d = window.dateUtils.daysBetween(x.expiryDate);
-    return d < 0 && d >= -7;
+    return d < 0 && d >= -expiryCriticalDays;
   }).length;
-  const warning  = allExpiryItems.filter(x => {
+  const expWarn  = allExpiryItems.filter(x => {
     const d = window.dateUtils.daysBetween(x.expiryDate);
-    return d < -7 && d >= -expiryAlertDays;
+    return d < -expiryCriticalDays && d >= -expiryWarningDays;
+  }).length;
+  const expWatch = allExpiryItems.filter(x => {
+    const d = window.dateUtils.daysBetween(x.expiryDate);
+    return d < -expiryWarningDays && d >= -expiryWatchDays;
   }).length;
 
   document.getElementById('alertsGrid').innerHTML = `
-    <div class="alert-card warning">
-      <div class="alert-icon warning"><i class="fa-solid fa-exclamation-triangle"></i></div>
-      <div class="alert-content">
-        <div class="alert-title">مخزون منخفض</div>
-        <div class="alert-value">${lowStock}</div>
+    <!-- ── مخزون: 4 مستويات ── -->
+    <div class="alert-card ${criticalStock > 0 ? 'danger' : 'warning'}" style="cursor:pointer;" onclick="loadProducts()">
+      <div class="alert-icon ${criticalStock > 0 ? 'danger' : 'warning'}">
+        <i class="fa-solid fa-boxes-stacked"></i>
       </div>
-    </div>
-
-    <div class="alert-card danger">
-      <div class="alert-icon danger"><i class="fa-solid fa-circle-exclamation"></i></div>
       <div class="alert-content">
-        <div class="alert-title">منتجات نافدة</div>
+        <div class="alert-title">⛔ نافد المخزون</div>
         <div class="alert-value">${outStock}</div>
+        ${criticalStock > 0 ? `<div style="font-size:0.72rem;color:var(--danger);margin-top:2px;">🚨 ${criticalStock} حرج · ⚠️ ${warningStock} تحذير · 🟡 ${watchStock} تنبيه</div>` : ''}
       </div>
     </div>
 
     <div class="alert-card danger" style="cursor:pointer;" onclick="switchTab('expiry')">
       <div class="alert-icon danger"><i class="fa-solid fa-calendar-xmark"></i></div>
       <div class="alert-content">
-        <div class="alert-title">دفعات منتهية الصلاحية</div>
+        <div class="alert-title">⛔ منتهية الصلاحية</div>
         <div class="alert-value">${expired}</div>
       </div>
     </div>
 
     <div class="alert-card warning" style="cursor:pointer;" onclick="switchTab('expiry')">
       <div class="alert-icon warning" style="background:rgba(234,88,12,0.15);color:#ea580c;">
-        <i class="fa-solid fa-triangle-exclamation"></i>
+        <i class="fa-solid fa-clock"></i>
       </div>
       <div class="alert-content">
-        <div class="alert-title">دفعات حرجة (أقل 7 أيام)</div>
-        <div class="alert-value" style="color:#ea580c;">${critical}</div>
+        <div class="alert-title">تنبيهات الصلاحية</div>
+        <div class="alert-value" style="color:#ea580c;">${expCrit + expWarn + expWatch}</div>
+        <div style="font-size:0.72rem; margin-top:3px; color:var(--text-secondary);">
+          🚨 ${expCrit} حرج · ⚠️ ${expWarn} تحذير · 🟡 ${expWatch} تنبيه
+        </div>
       </div>
     </div>
-  `;
+  \`;
 }
 
 // ============================================================
@@ -1668,10 +1708,22 @@ function renderProducts(products) {
     const start = (currentPage - 1) * pageSize;
     const rowNumber = start + index + 1;
     
-    // حالة المخزون
+    // حالة المخزون — 4 مستويات مربوطة بالإعدادات
     let stockClass = 'stock-high';
-    if (p.quantity === 0) stockClass = 'stock-low';
-    else if (p.quantity <= 5) stockClass = 'stock-medium';
+    let stockIcon  = '';
+    if (p.quantity === 0) {
+      stockClass = 'stock-low';
+      stockIcon  = ' ⛔';
+    } else if (p.quantity <= stockCriticalQty) {
+      stockClass = 'stock-critical';
+      stockIcon  = ' 🚨';
+    } else if (p.quantity <= stockWarningQty) {
+      stockClass = 'stock-warning';
+      stockIcon  = ' ⚠️';
+    } else if (p.quantity <= stockWatchQty) {
+      stockClass = 'stock-watch';
+      stockIcon  = ' 🟡';
+    }
     
     // حالة الصلاحية — نأخذ أخطر دفعة لهذا المنتج من productBatches
     let expiryClass = 'expiry-ok';
@@ -1689,42 +1741,47 @@ function renderProducts(products) {
       if (nearest) {
         const daysSince = window.dateUtils.daysBetween(nearest.expiryDate);
         expiryText = window.dateUtils.formatDate(nearest.expiryDate);
+        // 4 مستويات مربوطة بالإعدادات
         if (daysSince >= 0) {
-          // 🔴 منتهي
           expiryClass = 'expiry-danger';
-          expiryText  += ' ❌ منتهي';
-        } else if (daysSince >= -7) {
-          // 🟠 حرج — أقل من 7 أيام
+          expiryText  += ' ⛔ منتهي';
+        } else if (daysSince >= -expiryCriticalDays) {
           expiryClass = 'expiry-critical';
-          expiryText  += ` ⚠️ ${-daysSince} يوم`;
-        } else if (daysSince >= -expiryAlertDays) {
-          // 🟡 تنبيه — ضمن النافذة الزمنية من الإعدادات
+          expiryText  += ` 🚨 ${-daysSince} يوم`;
+        } else if (daysSince >= -expiryWarningDays) {
           expiryClass = 'expiry-warning';
-          expiryText  += ` (${-daysSince} يوم)`;
+          expiryText  += ` ⚠️ ${-daysSince} يوم`;
+        } else if (daysSince >= -expiryWatchDays) {
+          expiryClass = 'expiry-warning';
+          expiryText  += ` 🟡 ${-daysSince} يوم`;
         }
-        // إذا كان هناك أكثر من دفعة نضيف عددها
         if (pBatches.filter(b => b.expiryDate).length > 1) {
           expiryText += ` [${pBatches.filter(b => b.expiryDate).length} دفعات]`;
         }
       }
     } else if (p.expiryDate) {
-      // fallback: المنتجات القديمة قبل نظام الدفعات
+      // fallback: المنتجات القديمة
       const daysSince = window.dateUtils.daysBetween(p.expiryDate);
       expiryText = window.dateUtils.formatDate(p.expiryDate);
       if (daysSince >= 0) {
         expiryClass = 'expiry-danger';
-        expiryText  += ' ❌ منتهي';
-      } else if (daysSince >= -7) {
+        expiryText  += ' ⛔ منتهي';
+      } else if (daysSince >= -expiryCriticalDays) {
         expiryClass = 'expiry-critical';
-        expiryText  += ` ⚠️ ${-daysSince} يوم`;
-      } else if (daysSince >= -expiryAlertDays) {
+        expiryText  += ` 🚨 ${-daysSince} يوم`;
+      } else if (daysSince >= -expiryWarningDays) {
         expiryClass = 'expiry-warning';
-        expiryText  += ` (${-daysSince} يوم)`;
+        expiryText  += ` ⚠️ ${-daysSince} يوم`;
+      } else if (daysSince >= -expiryWatchDays) {
+        expiryClass = 'expiry-warning';
+        expiryText  += ` 🟡 ${-daysSince} يوم`;
       }
     }
     
     return `
-      <tr class="${p.quantity === 0 ? 'out-stock' : (p.quantity <= 5 ? 'low-stock' : '')}">
+      <tr class="${p.quantity === 0 ? 'out-stock' :
+                  p.quantity <= stockCriticalQty ? 'low-stock' :
+                  p.quantity <= stockWarningQty  ? 'low-stock' : ''}">
         <td style="color:var(--text-secondary); font-weight:600;">${rowNumber}</td>
         <td>
           <div style="font-weight:800;">${window.sanitizer.escape(p.name)}</div>
@@ -1736,7 +1793,7 @@ function renderProducts(products) {
         <td style="color:#60a5fa;">${p.buyPrice ? window.currencyFormatter.formatWithoutSymbol(p.buyPrice) : '—'}</td>
         <td style="color:var(--primary-light); font-weight:800;">${window.currencyFormatter.formatWithoutSymbol(p.sellPrice)}</td>
         <td>
-          <span class="stock-badge ${stockClass}">${p.quantity}</span>
+          <span class="stock-badge ${stockClass}">${p.quantity}${stockIcon}</span>
         </td>
         <td>
           <span class="expiry-badge ${expiryClass}">${expiryText}</span>
