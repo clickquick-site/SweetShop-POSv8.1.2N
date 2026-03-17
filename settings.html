@@ -1646,6 +1646,144 @@
             </div>
           </div>
 
+          <!-- ══ بطاقة مستويات الصلاحية ══ -->
+          <div class="settings-card">
+            <div class="card-header">
+              <i class="fa-solid fa-calendar-days" style="color:#ef4444;"></i>
+              <h3>مستويات تنبيهات الصلاحية</h3>
+            </div>
+            <div class="card-body">
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">🟡</span>
+                    <span>المستوى 1 — تنبيه مبكر</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد من الأيام تبدأ التنبيهات (افتراضي: 45)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="expiryWatchDays"
+                         min="1" max="365" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">يوم</span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">⚠️</span>
+                    <span>المستوى 2 — تحذير</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد تصبح درجة التحذير (افتراضي: 30)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="expiryWarningDays"
+                         min="1" max="364" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">يوم</span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">🚨</span>
+                    <span>المستوى 3 — حرج</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد يُمنع البيع وتظهر تنبيهات حرجة (افتراضي: 15)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="expiryCriticalDays"
+                         min="1" max="363" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">يوم</span>
+                </div>
+              </div>
+
+              <div class="setting-row" style="border-bottom:none; background:rgba(239,68,68,0.05); border-radius:8px; padding:10px 12px; margin-top:6px;">
+                <div class="setting-info">
+                  <div class="setting-label" style="color:var(--danger);">
+                    <span style="font-size:1rem;">⛔</span>
+                    <span>المستوى 4 — منتهي</span>
+                  </div>
+                  <div class="setting-desc">يُسحب تلقائياً من واجهة البيع ولا يمكن بيعه</div>
+                </div>
+                <div class="setting-control">
+                  <span style="color:var(--danger);font-weight:800;font-size:0.9rem;">0 يوم — تلقائي</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ══ بطاقة مستويات المخزون ══ -->
+          <div class="settings-card">
+            <div class="card-header">
+              <i class="fa-solid fa-boxes-stacked" style="color:#ea580c;"></i>
+              <h3>مستويات تنبيهات المخزون</h3>
+            </div>
+            <div class="card-body">
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">🟡</span>
+                    <span>المستوى 1 — تنبيه مبكر</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد تبدأ تنبيهات المخزون (افتراضي: 20)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="stockWatchQty"
+                         min="1" max="9999" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">وحدة</span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">⚠️</span>
+                    <span>المستوى 2 — تحذير</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد تصبح درجة التحذير (افتراضي: 15)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="stockWarningQty"
+                         min="1" max="9998" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">وحدة</span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">
+                    <span style="font-size:1rem;">🚨</span>
+                    <span>المستوى 3 — حرج</span>
+                  </div>
+                  <div class="setting-desc">من هذا العدد تُرفع تنبيهات حرجة (افتراضي: 10)</div>
+                </div>
+                <div class="setting-control" style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" class="form-input" id="stockCriticalQty"
+                         min="1" max="9997" step="1" style="width:90px;text-align:center;font-size:1.1rem;font-weight:800;">
+                  <span style="color:var(--text-secondary);font-size:0.85rem;">وحدة</span>
+                </div>
+              </div>
+
+              <div class="setting-row" style="border-bottom:none; background:rgba(107,114,128,0.08); border-radius:8px; padding:10px 12px; margin-top:6px;">
+                <div class="setting-info">
+                  <div class="setting-label" style="color:#6b7280;">
+                    <span style="font-size:1rem;">⛔</span>
+                    <span>المستوى 4 — نفاذ تام</span>
+                  </div>
+                  <div class="setting-desc">يظهر في البيع لكن يُمنع البيع تلقائياً</div>
+                </div>
+                <div class="setting-control">
+                  <span style="color:#6b7280;font-weight:800;font-size:0.9rem;">0 وحدة — تلقائي</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
           <!-- بطاقة إعدادات البريد الإلكتروني -->
           <div class="settings-card">
             <div class="card-header">
@@ -2056,7 +2194,9 @@ async function loadSettings() {
     'scaleEnabled', 'scaleType', 'scalePort', 'scaleBaudRate',
     'notifEnabled', 'notifyLowStock', 'notifyExpiry', 'notifyDebt', 'notifyLogin',
     'notifyInApp', 'serverUrl',
-    'autoBackup', 'backupTime'
+    'autoBackup', 'backupTime',
+    'expiryWatchDays', 'expiryWarningDays', 'expiryCriticalDays',
+    'stockWatchQty', 'stockWarningQty', 'stockCriticalQty'
   ];
   
   for (const key of settings) {
