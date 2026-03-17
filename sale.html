@@ -1431,7 +1431,7 @@ function renderCart() {
   }).join('');
 }
 
-function addToCart(product, quantity = null) {
+async function addToCart(product, quantity = null) {
   const qty = quantity || parseInt(document.getElementById('quickQty').value) || 1;
 
   if (product.quantity < qty) {
@@ -1442,27 +1442,30 @@ function addToCart(product, quantity = null) {
 
   // ── ExpirySaleGuard: فحص صلاحية الدفعة الأقرب للانتهاء ──
   if (product.id > 0) {
+    // قراءة الحد الحرج من الإعدادات (Single Source of Truth)
+    const critDays = parseInt(await window.getSetting('expiryCriticalDays')) || 15;
+
     const batches = (window._cachedBatches || [])
       .filter(b => b.productId === product.id && (b.quantity || 0) > 0 && b.expiryDate)
       .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
 
     if (batches.length > 0) {
-      const nearest   = batches[0];
-      const daysLeft  = window.ExpiryRiskEngine?._daysLeft(nearest.expiryDate) ?? null;
+      const nearest  = batches[0];
+      const daysLeft = window.ExpiryRiskEngine?._daysLeft(nearest.expiryDate) ?? null;
       if (daysLeft !== null) {
         if (daysLeft <= 0) {
-          // منتهي الصلاحية — منع البيع إلزامياً
+          // ⛔ منتهي — منع البيع إلزامياً
           window.toast.show(
-            `❌ "${product.name}" منتهي الصلاحية — لا يمكن بيعه`,
-            'error', 4000
+            `⛔ "${product.name}" منتهي الصلاحية — لا يمكن بيعه`,
+            'error', 4500
           );
           window.SoundManager?.play('warning');
           return;
         }
-        if (daysLeft <= 15) {
-          // حرج — تحذير ويُضاف مع علم البائع
+        if (daysLeft <= critDays) {
+          // 🚨 حرج — تحذير ويُضاف مع علم البائع
           window.toast.show(
-            `⚠️ تنبيه: "${product.name}" ينتهي خلال ${daysLeft} يوم`,
+            `🚨 تنبيه: "${product.name}" ينتهي خلال ${daysLeft} يوم`,
             'warning', 3500
           );
         }
@@ -1470,13 +1473,21 @@ function addToCart(product, quantity = null) {
     } else if (product.expiryDate) {
       // fallback: منتج قديم بدون دفعة
       const daysLeft = window.ExpiryRiskEngine?._daysLeft(product.expiryDate) ?? null;
-      if (daysLeft !== null && daysLeft <= 0) {
-        window.toast.show(
-          `❌ "${product.name}" منتهي الصلاحية — لا يمكن بيعه`,
-          'error', 4000
-        );
-        window.SoundManager?.play('warning');
-        return;
+      if (daysLeft !== null) {
+        if (daysLeft <= 0) {
+          window.toast.show(
+            `⛔ "${product.name}" منتهي الصلاحية — لا يمكن بيعه`,
+            'error', 4500
+          );
+          window.SoundManager?.play('warning');
+          return;
+        }
+        if (daysLeft <= critDays) {
+          window.toast.show(
+            `🚨 تنبيه: "${product.name}" ينتهي خلال ${daysLeft} يوم`,
+            'warning', 3500
+          );
+        }
       }
     }
   }
@@ -2703,7 +2714,7 @@ async function checkExpiryAlert() {
 
     // لا توجد مخاطر حقيقية → لا نُظهر النافذة
     const urgent = results.filter(r =>
-      r.level.id !== 'SAFE' && r.atRiskQty > 0
+      r.level.id !== 'SAFE' && (r.atRiskQty > 0 || r.level.id === 'EXPIRED')
     );
     if (urgent.length === 0) return;
 
