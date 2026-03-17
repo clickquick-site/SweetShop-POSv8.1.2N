@@ -428,6 +428,12 @@ class DatabaseManager {
         autoBackup: '1',
         lowStockAlert: '5',
         expiryAlertDays: '30',
+        expiryWatchDays:    '45',
+        expiryWarningDays:  '30',
+        expiryCriticalDays: '15',
+        stockWatchQty:      '20',
+        stockWarningQty:    '15',
+        stockCriticalQty:   '10',
         notifEnabled: '1',
         notifInApp: '1',
         notifyLogin: '0',
@@ -1257,13 +1263,9 @@ class NotificationManager {
           });
       }
       
-      // فحص المنتجات المنتهية
-      // daysBetween(expiry) = (today - expiry):
-      //   양수 (موجب)  = منتهي الصلاحية (اليوم تجاوز تاريخ الصلاحية)
-      //   صفر         = ينتهي اليوم
-      //   سالب        = لم ينته بعد، وعدده يساوي الأيام المتبقية
+      // فحص المنتجات المنتهية — يستخدم حدود WATCH من الإعدادات
       if (settingsMap.notifyExpiry !== '0') {
-        const expiryDays = parseInt(settingsMap.expiryAlertDays) || 30;
+        const expiryDays = parseInt(settingsMap.expiryWatchDays) || 45;
         products
           .filter(p => p.expiryDate)
           .forEach(p => {
@@ -1501,11 +1503,11 @@ class ThemeManager {
 // ══════════════════════════════════════════════════════════════
 
 const EXPIRY_LEVELS = Object.freeze({
-  SAFE:     { id: 'SAFE',     sort: 4, label: '🟢 آمن',        color: '#10b981', days: null },
-  WATCH:    { id: 'WATCH',    sort: 3, label: '🟡 تنبيه',       color: '#f59e0b', days: 45  },
-  WARNING:  { id: 'WARNING',  sort: 2, label: '🟠 تحذير',       color: '#ea580c', days: 30  },
-  CRITICAL: { id: 'CRITICAL', sort: 1, label: '🔴 حرج',         color: '#ef4444', days: 15  },
-  EXPIRED:  { id: 'EXPIRED',  sort: 0, label: '⚫ منتهي',       color: '#6b7280', days: 0   },
+  SAFE:     { id: 'SAFE',     sort: 4, label: '🟢 آمن',                  color: '#10b981', days: null },
+  WATCH:    { id: 'WATCH',    sort: 3, label: '🟡 تنبيه مبكر',           color: '#f59e0b', days: 45  },
+  WARNING:  { id: 'WARNING',  sort: 2, label: '⚠️ تحذير',                color: '#ea580c', days: 30  },
+  CRITICAL: { id: 'CRITICAL', sort: 1, label: '🚨 حرج — تصرف فوراً',    color: '#ef4444', days: 15  },
+  EXPIRED:  { id: 'EXPIRED',  sort: 0, label: '⛔ منتهي — سحب فوري',    color: '#6b7280', days: 0   },
 });
 
 class ExpiryRiskEngine {
@@ -1513,11 +1515,12 @@ class ExpiryRiskEngine {
   // ── الدالة الرئيسية: تحلل كل الدفعات وترجع تقرير كامل ──────
   static async analyze() {
     try {
-      const db       = window.dbManager;
-      const batches  = await db.getAll('productBatches');
-      const products = await db.getAll('products');
-      const items    = await db.getAll('saleItems');
-      const sales    = await db.getAll('sales');
+      const db         = window.dbManager;
+      const thresholds = await ExpiryRiskEngine._loadThresholds();
+      const batches    = await db.getAll('productBatches');
+      const products   = await db.getAll('products');
+      const items      = await db.getAll('saleItems');
+      const sales      = await db.getAll('sales');
 
       // خريطة saleId → date لربط saleItems بتواريخها
       const saleDateMap = {};
@@ -1568,11 +1571,11 @@ class ExpiryRiskEngine {
         // المنطق: نبيع atRiskQty بأي سعر > 0 لتقليل الخسارة
         const sellPrice     = product?.sellPrice || 0;
         const suggestedDisc = ExpiryRiskEngine._calcDiscount(
-          sellPrice, buyPrice, atRiskQty, dailyRate, daysLeft
+          sellPrice, buyPrice, atRiskQty, dailyRate, daysLeft, thresholds
         );
 
         // مستوى الخطر
-        const level = ExpiryRiskEngine._calcLevel(daysLeft, atRiskQty, qty);
+        const level = ExpiryRiskEngine._calcLevel(daysLeft, atRiskQty, qty, thresholds);
 
         // الإجراء المقترح
         const action = ExpiryRiskEngine._suggestAction(
@@ -1608,9 +1611,9 @@ class ExpiryRiskEngine {
         const atRiskQty  = Math.max(0, p.quantity - willSell);
         const lossAmount = atRiskQty * (p.buyPrice || 0);
         const suggestedDisc = ExpiryRiskEngine._calcDiscount(
-          p.sellPrice || 0, p.buyPrice || 0, atRiskQty, dailyRate, daysLeft
+          p.sellPrice || 0, p.buyPrice || 0, atRiskQty, dailyRate, daysLeft, thresholds
         );
-        const level  = ExpiryRiskEngine._calcLevel(daysLeft, atRiskQty, p.quantity);
+        const level  = ExpiryRiskEngine._calcLevel(daysLeft, atRiskQty, p.quantity, thresholds);
         const action = ExpiryRiskEngine._suggestAction(level, suggestedDisc, atRiskQty, lossAmount);
 
         results.push({
@@ -1642,6 +1645,21 @@ class ExpiryRiskEngine {
     }
   }
 
+  // ── جلب حدود المستويات من الإعدادات (Single Source of Truth) ──
+  static async _loadThresholds() {
+    const g = window.getSetting.bind(window);
+    return {
+      // صلاحية
+      expCritical: parseInt(await g('expiryCriticalDays')) || 15,
+      expWarning:  parseInt(await g('expiryWarningDays'))  || 30,
+      expWatch:    parseInt(await g('expiryWatchDays'))    || 45,
+      // مخزون
+      stkCritical: parseInt(await g('stockCriticalQty'))   || 10,
+      stkWarning:  parseInt(await g('stockWarningQty'))    || 15,
+      stkWatch:    parseInt(await g('stockWatchQty'))      || 20,
+    };
+  }
+
   // ── حساب الأيام المتبقية (سالب = منتهي) ──────────────────
   static _daysLeft(expiryDate) {
     const today    = new Date();
@@ -1651,29 +1669,29 @@ class ExpiryRiskEngine {
     return Math.floor(diffMs / 86400000);
   }
 
-  // ── تحديد مستوى الخطر ─────────────────────────────────────
-  static _calcLevel(daysLeft, atRiskQty, totalQty) {
-    if (daysLeft <= 0)                          return EXPIRY_LEVELS.EXPIRED;
-    if (daysLeft <= 15)                         return EXPIRY_LEVELS.CRITICAL;
-    if (daysLeft <= 30)                         return EXPIRY_LEVELS.WARNING;
-    if (daysLeft <= 45)                         return EXPIRY_LEVELS.WATCH;
-    // > 45 يوم: آمن فقط إذا الكمية المهددة صفر أو ضئيلة
+  // ── تحديد مستوى الخطر (يقرأ الحدود من settings) ────────
+  static _calcLevel(daysLeft, atRiskQty, totalQty, thresholds) {
+    const t = thresholds || { expCritical:15, expWarning:30, expWatch:45 };
+    if (daysLeft <= 0)                return EXPIRY_LEVELS.EXPIRED;
+    if (daysLeft <= t.expCritical)    return EXPIRY_LEVELS.CRITICAL;
+    if (daysLeft <= t.expWarning)     return EXPIRY_LEVELS.WARNING;
+    if (daysLeft <= t.expWatch)       return EXPIRY_LEVELS.WATCH;
+    // > expWatch يوم: آمن فقط إذا الكمية المهددة صفر أو ضئيلة
     if (atRiskQty <= 0 || atRiskQty / (totalQty || 1) < 0.05) return EXPIRY_LEVELS.SAFE;
-    return EXPIRY_LEVELS.WATCH; // > 45 يوم لكن يوجد كمية مهددة
+    return EXPIRY_LEVELS.WATCH;
   }
 
   // ── حساب نسبة الخصم المقترحة ──────────────────────────────
   // الهدف: تخفيض يجعل المنتج يُباع بالكامل قبل الانتهاء
-  static _calcDiscount(sellPrice, buyPrice, atRiskQty, dailyRate, daysLeft) {
+  static _calcDiscount(sellPrice, buyPrice, atRiskQty, dailyRate, daysLeft, thresholds) {
     if (atRiskQty <= 0 || daysLeft <= 0 || sellPrice <= 0) return 0;
-
-    // إذا كان البيع الحالي يكفي → لا خصم
     if (dailyRate * daysLeft >= atRiskQty) return 0;
 
-    // نسبة خصم تدريجية بناءً على مستوى الخطر
-    if (daysLeft <= 15) return Math.min(40, Math.round((1 - buyPrice / sellPrice) * 100 * 0.9));
-    if (daysLeft <= 30) return 20;
-    if (daysLeft <= 45) return 10;
+    const t = thresholds || { expCritical:15, expWarning:30, expWatch:45 };
+    // نسبة خصم تدريجية مربوطة بالإعدادات
+    if (daysLeft <= t.expCritical) return Math.min(40, Math.round((1 - buyPrice / sellPrice) * 100 * 0.9));
+    if (daysLeft <= t.expWarning)  return 20;
+    if (daysLeft <= t.expWatch)    return 10;
     return 5;
   }
 
